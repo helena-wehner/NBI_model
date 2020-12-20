@@ -115,7 +115,7 @@ uqu_scl <- stack(raster('LAI_Images/UQU_left/August/IMAGE_2020-08-16_32UQU_22_SC
 #writeRaster(uup_scl,'uup_scl_stack', format = 'GTiff',options="INTERLEAVE=BAND")
 #beep(sound = 2)
 # test: import Raster again
-uup_scl <- brick('uup_scl_stack.tif')
+uup_scl <- stack('uup_scl_stack.tif')
 
 uup_scl_clip <-mask(crop(uup_scl, fields_buffer_shp), fields_buffer_shp)
 # plot for checking result
@@ -126,7 +126,7 @@ uqu_scl_clip <- mask(crop(uqu_scl, fields_buffer_shp),fields_buffer_shp)
 plot(uqu_scl_clip$IMAGE_2020.08.16_32UQU_22_SCL_20m_Id177871641_L2A)
 
 # stack UUP_clip and UQU_clip together
-SCL <- stack(uup_scl_clip, uqu_scl_clip)
+SCL <- stack(uup_scl_clip, uqu_scl_clip, full.names = T)
 
 # export: SCL clipped Raster Stack (to be on the save side)
 writeRaster(x = SCL, filename = 'SCL.tiff', options="INTERLEAVE=BAND", overwrite = T)
@@ -140,18 +140,35 @@ writeRaster(x = SCL, filename = 'SCL.tiff', options="INTERLEAVE=BAND", overwrite
 LAI <- stack('LAI.tif')
 SCL <- stack('SCL.tif')
 
+# rename Labels from LAI Raster Stack
+names(LAI) <- c('LAI_2020.08.01','LAI_2020.08.06','LAI_2020.08.11',
+                     'LAI_2020.07.07','LAI_2020.07.27','LAI_2020.06.02','LAI_2020.06.12',
+                     'LAI_2020.06.27',
+                     'LAI_2020.08.16','LAI_2020.07.12','LAI_2020.07.22')
+
+# rename Labels from SCL Raster Stack
+names(SCL) <- c('SCL_2020.08.01','SCL_2020.08.06','SCL_2020.08.11',
+                'SCL_2020.07.07','SCL_2020.07.27','SCL_2020.06.02','SCL_2020.06.12',
+                'SCL_2020.06.27',
+                'SCL_2020.08.16','SCL_2020.07.12','SCL_2020.07.22')
+
 ### STEP 2: CLOUD MASKING ----
 
 # create Cloud Mask ----
+# Values of SCL without cloud values = NA --> NA's = 75589
+summary(getValues(SCL))
 # set values of SCL stack (7:11 = related to clouds) to NA
-SCL <- calc(SCL, fun = function(x)
+SCL_cloud <- calc(SCL, fun = function(x)
   {x[x >= 6.99] <- NA;
   return(x)}
   )
-
+beep(sound = 1)
 # check if there are still values above 7 in the SCL raster stack
-summary(getValues(SCL))
-plot(SCL$SCL.11)
+summary(getValues(SCL_cloud))
+plot(SCL_cloud$SCL_2020.07.22)
+# Layers with NA's = 75589 --> no Pixels are covered with clouds
+
+# Apply SCL Cloud Mask to LAI Raster Stack----
 
 # remove from LAI raster stack all values that are NA in SCL raster stack
 LAI2 <- mask(LAI$IMAGE_2020.08.01_33UUP_22_LAI_10m_Id175305793_L2A,SCL$IMAGE_2020.08.01_33UUP_22_SCL_20m_Id175280181_L2A)
