@@ -171,7 +171,10 @@ plot(SCL_cloud$SCL_2020.07.22)
 # Apply SCL Cloud Mask to LAI Raster Stack----
 
 # remove from LAI raster stack all values that are NA in SCL raster stack
-LAI2 <- mask(LAI$IMAGE_2020.08.01_33UUP_22_LAI_10m_Id175305793_L2A,SCL$IMAGE_2020.08.01_33UUP_22_SCL_20m_Id175280181_L2A)
+LAI2 <- mask(x = LAI$LAI_2020.07.22,mask = SCL_cloud$SCL_2020.07.22, maskvalue = NA)
+
+
+
 
 # extract all Values of Raster Stack LAI which are no clouds
 # mask LAI Image with Cloud Mask
