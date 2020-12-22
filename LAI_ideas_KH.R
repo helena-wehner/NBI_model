@@ -15,6 +15,8 @@ if ( ! require("raster") ) { install.packages("raster");
   library("raster")      }
 if ( ! require("beepr") ) { install.packages("beepr");
   library("beepr")      }
+if( ! require('graphics') ) { install.packages('graphics');
+  library('graphics')}
 
 ### STEP 1:  DATA PREPARATION ----
 
@@ -170,14 +172,33 @@ plot(SCL_cloud$SCL_2020.07.22)
 
 # Apply SCL Cloud Mask to LAI Raster Stack----
 
+# change resolution of SCL to resolution of LAI
+res(LAI)
+res(SCL)
+
+SCL_res <- disaggregate(SCL_cloud, fact = 2)
+#beep(sound = 2)
+
+# just for testing
+#SCL_res1 <- disaggregate(x = SCL_cloud$SCL_2020.07.22, fact = 2)
+#res(SCL_res1)
+#res(SCL_res)
+
 # remove from LAI raster stack all values that are NA in SCL raster stack
-LAI2 <- mask(x = LAI$LAI_2020.07.22,mask = SCL_cloud$SCL_2020.07.22, maskvalue = NA)
-
-
-
-
 # extract all Values of Raster Stack LAI which are no clouds
 # mask LAI Image with Cloud Mask
+LAI2 <- mask(x = LAI,mask = SCL_res, maskvalue = NA)
+
+# plot an image to see if it changed
+par(mfrow = c(2,2))
+
+plot(SCL$SCL_2020.07.12)
+plot(LAI$LAI_2020.07.12)
+plot(SCL_res$SCL_2020.07.12)
+plot(LAI2$LAI_2020.07.12)
+# best to see with image of: 2020.07.22
+
+
 
 
 
