@@ -199,10 +199,12 @@ plot(LAI2$LAI_2020.07.12)
 # best to see with image of: 2020.07.22
 
 
-
-
-
 ### STEP 3: LAI Values Extraction - Linear Regression
+
+# EXTRACTION LAI Values and Calculation of MEAN per Area
+
+# test for one image
+LAI_v <- raster::extract(LAI2$LAI_2020.07.12, fields_buffer_5, fun = mean, df = T)
 
 # 2.2. For-loop to extract LAI loop
 ## input:
