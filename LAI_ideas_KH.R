@@ -204,7 +204,9 @@ plot(LAI2$LAI_2020.07.12)
 # EXTRACTION LAI Values and Calculation of MEAN per Area
 
 # test for one image
-LAI_v <- raster::extract(LAI2$LAI_2020.07.12, fields_buffer_5, fun = mean, df = T)
+LAI_v <- raster::extract(LAI2, fields_buffer_shp, fun = mean, na.rm = T, df = T)
+beep(sound = 1)
+LAI_v$CompID <- fields_buffer_shp$CompID
 
 # 2.2. For-loop to extract LAI loop
 ## input:
