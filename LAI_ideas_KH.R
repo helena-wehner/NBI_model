@@ -205,29 +205,41 @@ plot(LAI2$LAI_2020.07.12)
 
 # EXTRACTION LAI Values and Calculation of MEAN per Area
 
-# test for one image
 LAI_v <- raster::extract(LAI2, fields_buffer_shp, fun = mean, na.rm = T, df = T)
 beep(sound = 1)
 LAI_v$CompID <- fields_buffer_shp$CompID
 
-par(mfrow = c(4,4))
+# reorder the columns of LAI_v table
+LAI_v <- LAI_v[,order(names(LAI_v))]
 
-plot(density(as.numeric(LAI_v[1,2:12]), na.rm = T), main = LAI_v[1,13])
-plot(density(as.numeric(LAI_v[2,2:12]), na.rm = T), main = LAI_v[2,13])
-plot(density(as.numeric(LAI_v[3,2:12]), na.rm = T), main = LAI_v[3,13])
-plot(density(as.numeric(LAI_v[4,2:12]), na.rm = T), main = LAI_v[4,13])
-plot(density(as.numeric(LAI_v[5,2:12]), na.rm = T), main = LAI_v[5,13])
-plot(density(as.numeric(LAI_v[6,2:12]), na.rm = T), main = LAI_v[6,13])
-plot(density(as.numeric(LAI_v[7,2:12]), na.rm = T), main = LAI_v[7,13])
-plot(density(as.numeric(LAI_v[8,2:12]), na.rm = T), main = LAI_v[8,13])
-plot(density(as.numeric(LAI_v[9,2:12]), na.rm = T), main = LAI_v[9,13])
-plot(density(as.numeric(LAI_v[10,2:12]), na.rm = T), main = LAI_v[10,13])
-plot(density(as.numeric(LAI_v[11,2:12]), na.rm = T), main = LAI_v[11,13])
-plot(density(as.numeric(LAI_v[12,2:12]), na.rm = T), main = LAI_v[12,13])
-plot(density(as.numeric(LAI_v[13,2:12]), na.rm = T), main = LAI_v[13,13]) # absence
-plot(density(as.numeric(LAI_v[14,2:12]), na.rm = T), main = LAI_v[14,13]) # absence
-plot(density(as.numeric(LAI_v[15,2:12]), na.rm = T), main = LAI_v[15,13]) # presence
-plot(density(as.numeric(LAI_v[16,2:12]), na.rm = T), main = LAI_v[16,13]) # presence
+# export LAI_v data table
+write.csv2(LAI_v, file = 'LAI_v.csv')
+
+par(mfrow = c(2,2))
+
+# Density Plot
+plot(density(as.numeric(LAI_v[1,2:12]), na.rm = T), main = LAI_v[1,1])
+plot(density(as.numeric(LAI_v[2,2:12]), na.rm = T), main = LAI_v[2,1])
+plot(density(as.numeric(LAI_v[3,2:12]), na.rm = T), main = LAI_v[3,1])
+plot(density(as.numeric(LAI_v[4,2:12]), na.rm = T), main = LAI_v[4,1])
+plot(density(as.numeric(LAI_v[5,2:12]), na.rm = T), main = LAI_v[5,1])
+plot(density(as.numeric(LAI_v[6,2:12]), na.rm = T), main = LAI_v[6,1])
+plot(density(as.numeric(LAI_v[7,2:12]), na.rm = T), main = LAI_v[7,1])
+plot(density(as.numeric(LAI_v[8,2:12]), na.rm = T), main = LAI_v[8,1])
+plot(density(as.numeric(LAI_v[9,2:12]), na.rm = T), main = LAI_v[9,1])
+plot(density(as.numeric(LAI_v[10,2:12]), na.rm = T), main = LAI_v[10,1])
+plot(density(as.numeric(LAI_v[11,2:12]), na.rm = T), main = LAI_v[11,1])
+plot(density(as.numeric(LAI_v[12,2:12]), na.rm = T), main = LAI_v[12,1])
+plot(density(as.numeric(LAI_v[13,2:12]), na.rm = T), main = LAI_v[13,1]) # absence
+plot(density(as.numeric(LAI_v[14,2:12]), na.rm = T), main = LAI_v[14,1]) # absence
+plot(density(as.numeric(LAI_v[15,2:12]), na.rm = T), main = LAI_v[15,1]) # presence
+plot(density(as.numeric(LAI_v[16,2:12]), na.rm = T), main = LAI_v[16,1]) # presence
+
+# Scatterplot
+plot(as.numeric(LAI_v[13,2:12]), na.rm = T, main = LAI_v[13,1]) # absence
+plot(as.numeric(LAI_v[14,2:12]), na.rm = T, main = LAI_v[14,1]) # absence
+plot(as.numeric(LAI_v[15,2:12]), na.rm = T, main = LAI_v[15,1]) # presence
+plot(as.numeric(LAI_v[16,2:12]), na.rm = T, main = LAI_v[16,1]) # presence
 
 # hier habe ich einmal Plots gemacht, die von jeweils einem Feld die Verteilung der LAI
 # Werte zeigt, die wir direkt aus den Sentinel Images ziehen.
