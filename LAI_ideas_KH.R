@@ -19,6 +19,11 @@ if( ! require('graphics') ) { install.packages('graphics');
   library('graphics')}
 if ( ! require('ggplot2') ) { install.packages('ggplot2')};
   library('ggplot2')
+if ( ! require('ellipse') ) { install.packages('ellipse')};
+  library('ellipse')
+if ( ! require('corrplot') ) { install.packages('corrplot')};
+  library('corrplot')
+
 
 ### STEP 1:  DATA PREPARATION ----
 
@@ -165,7 +170,7 @@ summary(getValues(SCL))
 SCL_cloud <- calc(SCL, fun = function(x)
   {x[x >= 6.99] <- NA;
   return(x)}
-  )
+)
 beep(sound = 1)
 # check if there are still values above 7 in the SCL raster stack
 summary(getValues(SCL_cloud))
@@ -192,16 +197,53 @@ SCL_res <- disaggregate(SCL_cloud, fact = 2)
 LAI2 <- mask(x = LAI,mask = SCL_res, maskvalue = NA)
 
 # plot an image to see if it changed
+x11()
 par(mfrow = c(2,2))
 
-plot(SCL$SCL_2020.07.12)
-plot(LAI$LAI_2020.07.12)
-plot(SCL_res$SCL_2020.07.12)
-plot(LAI2$LAI_2020.07.12)
+plot(SCL$SCL_2020.07.22)
+plot(LAI$LAI_2020.07.22)
+plot(SCL_res$SCL_2020.07.22)
+plot(LAI2$LAI_2020.07.22)
 # best to see with image of: 2020.07.22
 
+### STEP 3: LAI Value Range Correction ----
 
-### STEP 3: LAI Values Extraction - Linear Regression
+# actual value range from LAI values: 
+range(LAI2)
+# min values :       166,      2090 
+# max values :      1711,     31218 
+
+# given range by LAI formula has to be:
+# Tolerance: 0.2
+# Pmin: 0
+# Pmax: 8.0
+
+# 1. divide each LAI values by 1000
+LAI.1000 <- LAI2/1000
+# check again for min and max values:
+range(LAI.1000)
+# min values :  0.339000,  3.309017 
+# max values :     1.711,    31.218 
+
+# 2. all values > 10 need to be assigned to NA
+# these valuea are consideres as invalid
+LAI.NA <- LAI.1000
+LAI.NA[LAI.NA > 10] <- NA
+# check again for min and max values:
+range(LAI.NA)
+# min values :  0.339000,  3.309017 
+# max values :  1.614760,  9.841179 
+
+# 3. all values > 8 need to be changed to 8
+# values between 8 and 10 are considered as valid, but need to be reclassified
+LAI3 <- LAI.NA
+LAI3[LAI3 > 8] <- 8
+# check again for min and max values
+range(LAI3)
+# min values :  0.339000,  3.309017 
+# max values :   1.61476,   8.00000
+
+### STEP 4: LAI Values Extraction - Linear Regression ----
 
 # EXTRACTION LAI Values and Calculation of MEAN per Area
 
@@ -248,6 +290,25 @@ plot(as.numeric(LAI_v[16,2:12]), na.rm = T, main = LAI_v[16,1]) # presence
 
 
 plot(density(as.numeric(LAI_v[2,2:ncol(LAI_v)]), na.rm = T))
+
+  ## CORRELATION
+    # Possible Correlation between LAI and FCover data?
+    LAI_FC <- stack(LAI2, FCover2)
+    cm <- cor(getValues(LAI_FC), use = "complete.obs") # pearson coefficient (default)
+    par(mfrow = c(1,1))
+    plotcorr(cm, col=ifelse(abs(cm) > 0.7, "red", "grey"))
+    corrplot(cm, method = 'color',type = 'upper', order='alphabet',
+             addCoef.col='black', tl.col='black', tl.srt=45, diag=F, outline = T)
+    # there is a strong correlation between LAI and FCover values 
+    # always above 0.8, except for 07.07.2020
+
+
+#########################################################
+
+### TEST INTERPOLATION FOR ONE AREA
+
+# extract all xP01 areas from fields_buffer_shp file
+
 
 
 # 2.2. For-loop to extract LAI loop
