@@ -206,7 +206,7 @@ plot(SCL_res$SCL_2020.07.22)
 plot(LAI2$LAI_2020.07.22)
 # best to see with image of: 2020.07.22
 
-# export LAI file with Cloud Mask
+# Export LAI file with Cloud Mask
 writeRaster(x = LAI2, filename = 'LAI_cloud.tiff', options="INTERLEAVE=BAND", overwrite = T)
 
 ### STEP 3: LAI Value Range Correction ----
@@ -228,14 +228,14 @@ range(LAI.1000)
 # min values :  0.339000,  3.309017 
 # max values :     1.711,    31.218 
 
-# 2. all values > 10 need to be assigned to NA
-# these valuea are consideres as invalid
+# 2. all values > 8.2 need to be assigned to NA
+# these valuea are considered as invalid
 LAI.NA <- LAI.1000
-LAI.NA[LAI.NA > 10] <- NA
+LAI.NA[LAI.NA > 8.2] <- NA
 # check again for min and max values:
 range(LAI.NA)
 # min values :  0.339000,  3.309017 
-# max values :  1.614760,  9.841179 
+# max values :  1.614760,  7.639055
 
 # 3. all values > 8 need to be changed to 8
 # values between 8 and 10 are considered as valid, but need to be reclassified
@@ -244,7 +244,10 @@ LAI3[LAI3 > 8] <- 8
 # check again for min and max values
 range(LAI3)
 # min values :  0.339000,  3.309017 
-# max values :   1.61476,   8.00000
+# max values :  1.614760,  7.639055
+
+# Export LAI Raster with Range Mask
+writeRaster(x = LAI3, filename = 'LAI_range.tiff', options="INTERLEAVE=BAND", overwrite = T)
 
 ### STEP 4: LAI Values Extraction - Linear Regression ----
 
@@ -304,7 +307,7 @@ plot(as.numeric(LAI_v[16,2:12]), na.rm = T, main = LAI_v[16,1]) # presence
     corrplot(cm, method = 'color',type = 'upper', order='alphabet',
              addCoef.col='black', tl.col='black', tl.srt=45, diag=F, outline = T)
     # there is a strong correlation between LAI and FCover values 
-    # always above 0.79
+    # always above 0.8 (12.07.20)
 
 
 #########################################################
