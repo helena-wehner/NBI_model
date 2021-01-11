@@ -201,12 +201,47 @@ plot(SCL_res$SCL_2020.07.22)
 plot(FCover2$FCover_2020.07.22)
 # best to see with image of: 2020.07.22
 
+# export FCover with Cloud Mask
+writeRaster(x = FCover2, filename = 'FCover_cloud.tiff', options="INTERLEAVE=BAND", overwrite = T)
 
-### STEP 3: FCover Values Extraction - Linear Regression
+### STEP 3: FCover Value Range Correction ----
+
+# actual value range from FCover values:
+range(FCover2)
+# min values :   83.0000,  659.2153 
+# max values :  503.4149, 1001.0000
+
+# FCover range given by formula has to be:
+# Tolerance: 0.1
+# Pmax: 1
+# Pmin: 0.1
+
+# 1. divide each FCover value by 1000
+FCover.100 <- FCover2/1000
+# check again for min and max values
+range(FCover.100)
+# min values : 0.0830000, 0.6592153 
+# max values : 0.5034149, 1.0010000 
+
+# 2. values > 1 are reclassified to 1
+# and values < 0.1 are reclassified to 0.1
+FCover.max <- FCover.100
+FCover.max[FCover.max > 1] <- 1
+FCover3 <- FCover.max
+FCover3[FCover3 < 0.1] <- 0.1
+# check value range again
+range(FCover3)
+# min values : 0.1000000, 0.6592153 
+# max values : 0.5034149, 1.0000000
+
+# Export FCover Raster with Range Mask
+writeRaster(x = FCover3, filename = 'FCover_range.tiff', options="INTERLEAVE=BAND", overwrite = T)
+
+### STEP 4: FCover Values Extraction - Linear Regression
 
 # EXTRACTION FCover Values and Calculation of MEAN per Area
 
-FCover_v <- raster::extract(FCover2, fields_buffer_shp, fun = mean, na.rm = T, df = T)
+FCover_v <- raster::extract(FCover3, fields_buffer_shp, fun = mean, na.rm = T, df = T)
 beep(sound = 1)
 FCover_v$CompID <- fields_buffer_shp$CompID
 
