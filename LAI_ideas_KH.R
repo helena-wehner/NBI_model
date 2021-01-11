@@ -206,6 +206,9 @@ plot(SCL_res$SCL_2020.07.22)
 plot(LAI2$LAI_2020.07.22)
 # best to see with image of: 2020.07.22
 
+# export LAI file with Cloud Mask
+writeRaster(x = LAI2, filename = 'LAI_cloud.tiff', options="INTERLEAVE=BAND", overwrite = T)
+
 ### STEP 3: LAI Value Range Correction ----
 
 # actual value range from LAI values: 
@@ -247,12 +250,15 @@ range(LAI3)
 
 # EXTRACTION LAI Values and Calculation of MEAN per Area
 
-LAI_v <- raster::extract(LAI2, fields_buffer_shp, fun = mean, na.rm = T, df = T)
+LAI_v <- raster::extract(LAI3, fields_buffer_shp, fun = mean, na.rm = T, df = T)
 beep(sound = 1)
 LAI_v$CompID <- fields_buffer_shp$CompID
 
 # reorder the columns of LAI_v table
 LAI_v <- LAI_v[,order(names(LAI_v))]
+
+# remove second ID column
+LAI_v <- LAI_v[,-c(2)]
 
 # export LAI_v data table
 write.csv2(LAI_v, file = 'LAI_v.csv')
@@ -289,18 +295,16 @@ plot(as.numeric(LAI_v[16,2:12]), na.rm = T, main = LAI_v[16,1]) # presence
 # in ähnlichen Regionen zu sehen sind. Manchmal ist nur der Peak der niederigeren Werte vorhanden
 
 
-plot(density(as.numeric(LAI_v[2,2:ncol(LAI_v)]), na.rm = T))
-
   ## CORRELATION
     # Possible Correlation between LAI and FCover data?
-    LAI_FC <- stack(LAI2, FCover2)
+    LAI_FC <- stack(LAI3, FCover2)
     cm <- cor(getValues(LAI_FC), use = "complete.obs") # pearson coefficient (default)
     par(mfrow = c(1,1))
     plotcorr(cm, col=ifelse(abs(cm) > 0.7, "red", "grey"))
     corrplot(cm, method = 'color',type = 'upper', order='alphabet',
              addCoef.col='black', tl.col='black', tl.srt=45, diag=F, outline = T)
     # there is a strong correlation between LAI and FCover values 
-    # always above 0.8, except for 07.07.2020
+    # always above 0.79
 
 
 #########################################################
