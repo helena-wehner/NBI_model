@@ -6,8 +6,6 @@
 #############################
 
 
-setwd("C:/Users/Lenovo/Desktop/Master/SoSe_2020/Spatial Modelling and Prediction/")
-
 library(rms) 
 library(raster)
 library(mgcv) # for gam
@@ -27,6 +25,7 @@ library(sf)
 library(dplyr)
 library(mapview)
 library(rgeos)
+library(beepr)
 
 #######################
 ### Data Preparation ###
@@ -35,7 +34,7 @@ library(rgeos)
 ### 1. load NBI Movement Data
 
 # 'clipped NBI speed' Shapefile
-nbi <- readOGR('GPS Daten Vögel/2020_feb-nov_16birds_exklLI.shp')
+nbi <- readOGR('Model_Swiss/GPS Daten Vögel/2020_feb-nov_16birds_exklLI.shp')
 # NOTE: clip data to speed
 plot(nbi)
 # n = 48827 (points)
@@ -45,46 +44,117 @@ plot(nbi)
 #nbi <- SpatialPointsDataFrame(coords = data.frame(as.numeric(nbi$lon), as.numeric(nbi$lat)),nbi)
 
 ### load Training Area and Area for Prediction
-pred <- readOGR("swiss.shp")
+pred <- readOGR("Model_Swiss/swiss.shp")
 # change projection
 pred <- spTransform(pred, CRSobj = crs(nbi))
+plot(pred)
 
 ### 2. load Environmenatl Parameters
 
 ### SRTM/Elevation Data
-srtm_pred <- raster("SRTM_Pred.tif")
-names(srtm_pred) <- c("SRTM")
+srtm <- raster("raster/SRTM_Pred.tif")
+names(srtm) <- c("SRTM")
+# Clip to Area of Switzerland and cut parts of BaWü
+#srtm <- raster::mask(crop(srtm_pred, pred),pred)
+plot(srtm)
 
 ### Calculate Slope
 # Training Area
-slope_pred <- terrain(srtm_pred, opt="slope", unit="degrees", neighbours=8) 
-beep(sound = 1)
-names(slope_pred) <- c("Slope")
+#slope <- raster::terrain(srtm_pred, opt="slope", unit="degrees", neighbours=8) 
+#writeRaster(slope, filename = 'raster/Slope.tif', overwrite = T)
+slope <- raster('raster/Slope_Pred.tif')
+names(slope) <- c('Slope')
+#slope <- raster::mask(raster::crop(slope, pred),pred)
+#beep(sound = 1)
+plot(slope)
 
 ### Indices
-indices_pred <- raster::stack("Indices_pred.tif")
-names(indices_pred) <- c("NDVI","EVI","Brightness")
-n_pred <- indices_pred$NDVI
-e_pred <- indices_pred$EVI
-b_pred <- indices_pred$Brightness
+#indices_pred <- raster::stack("Model_Swiss/Indices_pred.tif")
+#names(indices_pred) <- c("NDVI","EVI","Brightness")
+#n_pred <- indices_pred$NDVI
+#e_pred <- indices_pred$EVI
+#b_pred <- indices_pred$Brightness
 
-### Normalized Difference Water Index (NDWI)
-ndwi_pred <- raster("NDWI_pred.tif")
-names(ndwi_pred) <- c('NDWI')
+### Grasscover
+grasscover <- raster('raster/2019.tif')
+names(grasscover) <- c('Grass')
+grasscover <- projectRaster(grasscover, crs = projection(slope))
+#extent(grasscover) <- extent(srtm)
 
+### Wetness TCI
+wetness <- raster('raster/Wetness.tif')
+names(wetness) <- c('Wetness')
+#extent(wetness) <- extent(srtm)
+
+### Brightness TCI
+bright <- raster('raster/Brightness.tif')
+names(bright) <- c('Brightness')
+#extent(bright) <- extent(srtm)
+
+### RESCALE: NDVI, NDWI, EVI
+
+### NDWI
+ndwi <- raster('raster/NDWI.tif')
+#extent(ndwi) <- extent(srtm)
+ndwi <- RStoolbox::rescaleImage(ndwi, ymin = -1, ymax = 1)
+
+ndwi.min = cellStats(ndwi, "min")
+ndwi.max = cellStats(ndwi, "max")
+
+ndwi.scale <- ((ndwi - ndwi.min) / (ndwi.max - ndwi.min) - 0.5 ) * 2
+plot(ndwi.scale)
+
+names(ndwi) <- c('NDWI')
+summary(values(ndwi))
+plot(ndwi)
+
+### NDVI
+# 1. Methode
+ndvi <- raster('raster/NDVI.tif')
+#extent(ndvi) <- extent(srtm)
+ndvi2 <- RStoolbox::rescaleImage( x = ndvi, xmin = -64, xmax = 121, ymin = -1, ymax = 1)
+plot(ndvi2)
+
+#writeRaster(ndvi2, filename = 'NDVI2.tif', overwrite = T)
+
+# 2. Methode
+ndvi.min = cellStats(ndvi, "min")
+ndvi.max = cellStats(ndvi, "max")
+
+ndvi.scale <- ((ndvi - ndvi.min) / (ndvi.max - ndvi.min) - 0.5 ) * 2
+plot(ndvi.scale)
+summary(values(ndvi.scale))
+
+### EVI
+evi <- raster('raster/EVI.tif')
+names(evi) <- c('EVI')
+#extent(evi) <- extent(srtm)
+
+### set Extent
+bbox <- bbox(slope)
+grasscover <- setExtent(grasscover, bbox)
+#srtm <- setExtent(srtm, bbox)
 
 ### 3. Stack all Environmental Parameters into one Raster
 
 # Prediction Area
-env_pred <- stack(srtm_pred, slope_pred, n_pred, e_pred, b_pred, ndwi_pred)
+
+# without srtm and grasscover
+env <- stack(ndvi, evi, ndwi, bright, wetness, slope, srtm)
 
 ### Resolution 500
 #env_train500 <- aggregate(env_train, fact = 50/3)
-env_pred500 <- aggregate(env_pred, fact = 50/3)
-beep(sound = 1)
+#env_pred500 <- aggregate(env_pred, fact = 50/3)
+#beep(sound = 1)
 
-# Clip to Area of Switzerland and cut parts of BaWü
-env_pred500 <- raster::crop(raster::mask(env_pred500, pred),pred)
+### Change Resolution to 100m
+env100 <- aggregate(env, fact = (res(grasscover)*100000/res(env)*100000))
+#grasscover <- aggregate(grasscover, fact = 1)
+
+# add grasscover data
+env100 <- stack(env100, grasscover)
+
+# Clip to Area of Switzerland BFF Kantone
 
 # Clip Point Data to Area of Switzerland
 nbi <- gIntersection(pred, nbi, byid = TRUE, drop_lower_td = TRUE)
@@ -98,20 +168,20 @@ beep(sound = 1)
 
 # selecting 10000 random background samples
 set.seed(2)
-background <- randomPoints(env_pred500, 2000, nbi)
+background <- randomPoints(env100, 2000, nbi)
 
 # select only one presence record in each cell of environmental layer
-presence <- gridSample(xy = nbi,r = env_pred500, n=1)
+presence <- gridSample(xy = nbi,r = env100, n=1)
 
 # now we combine the presence and background points, adding a column "species" that contains
 # the information about presence (1) and background (2)
 fulldata <- SpatialPointsDataFrame(rbind(presence, background),
                                    data = data.frame("species" = rep(c(1,0),c(nrow(presence),nrow(background)))),
                                    match.ID = F,
-                                   proj4string = CRS(projection(env_pred500)))
+                                   proj4string = CRS(projection(env100)))
 
 # add information about environmental conditions at point locations
-fulldata@data <- cbind(fulldata@data, extract(env_pred500, fulldata))
+fulldata@data <- cbind(fulldata@data, extract(env100, fulldata))
 
 # split data set into training and test/validation data
 # not needed if I use training area and validation area
@@ -120,7 +190,7 @@ fold <- kfold(fulldata, k=5)
 traindata <- fulldata[fold != 1,]
 testdata <- fulldata[fold == 1, ]
 
-varname <- names(env_pred500)
+varname <- names(env)
 
 ####################
 ### Collinearity ###
@@ -237,4 +307,3 @@ plot(varimp_rf)
 
 # I decided to use Random Forest Model, because this model seems to work better, especially when
 # having a look at lake areas.
-
