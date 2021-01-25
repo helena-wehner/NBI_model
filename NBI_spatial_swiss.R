@@ -9,7 +9,7 @@
 library(rms) 
 library(raster)
 library(mgcv) # for gam
-source("Spatial-Modelling-and-Prediction-MET-EAGLE-/varImpBiomod.R")
+source("varImpBiomod.R")
 # varImpBiomod Function: slightly changed, because of NA values 
 library(randomForest)
 library(dismo)
@@ -26,6 +26,7 @@ library(dplyr)
 library(mapview)
 library(rgeos)
 library(beepr)
+library(corrplot)
 
 #######################
 ### Data Preparation ###
@@ -47,6 +48,7 @@ plot(nbi)
 pred <- readOGR("Model_Swiss/swiss.shp")
 # change projection
 pred <- spTransform(pred, CRSobj = crs(nbi))
+projection(pred)
 plot(pred)
 
 ### 2. load Environmenatl Parameters
@@ -95,40 +97,51 @@ names(bright) <- c('Brightness')
 
 ### NDWI
 ndwi <- raster('raster/NDWI.tif')
-#extent(ndwi) <- extent(srtm)
-ndwi <- RStoolbox::rescaleImage(ndwi, ymin = -1, ymax = 1)
 
-ndwi.min = cellStats(ndwi, "min")
-ndwi.max = cellStats(ndwi, "max")
+# 1. Try/Option
+ndwicl <- clamp(ndwi, -1, 1)
+ndwi2 <- setMinMax(ndwicl)
+ndwi_rs <- RStoolbox::rescaleImage(x = ndwi2, ymin = -1, ymax = 1)
 
-ndwi.scale <- ((ndwi - ndwi.min) / (ndwi.max - ndwi.min) - 0.5 ) * 2
-plot(ndwi.scale)
+summary(ndwi_rs)
+plot(ndwi_rs)
 
-names(ndwi) <- c('NDWI')
-summary(values(ndwi))
-plot(ndwi)
+# 2. Try/Option
+#ndwi.scale <- ((ndwi - ndwi.min) / (ndwi.max - ndwi.min) - 0.5 ) * 2
+#plot(ndwi.scale)
+
+#names(ndwi) <- c('NDWI')
+#summary(values(ndwi))
+#plot(ndwi)
 
 ### NDVI
 # 1. Methode
 ndvi <- raster('raster/NDVI.tif')
-#extent(ndvi) <- extent(srtm)
-ndvi2 <- RStoolbox::rescaleImage( x = ndvi, xmin = -64, xmax = 121, ymin = -1, ymax = 1)
-plot(ndvi2)
+ndviclamp <- clamp(ndvi, -1, 1)
+ndvi2 <- setMinMax(ndviclamp)
+ndvi_rs <- RStoolbox::rescaleImage( x = ndvi2, ymin = -1, ymax = 1)
+summary(ndvi_rs)
+plot(ndvi_rs)
 
 #writeRaster(ndvi2, filename = 'NDVI2.tif', overwrite = T)
 
 # 2. Methode
-ndvi.min = cellStats(ndvi, "min")
-ndvi.max = cellStats(ndvi, "max")
+#ndvi.min = cellStats(ndvi, "min")
+#ndvi.max = cellStats(ndvi, "max")
 
-ndvi.scale <- ((ndvi - ndvi.min) / (ndvi.max - ndvi.min) - 0.5 ) * 2
-plot(ndvi.scale)
-summary(values(ndvi.scale))
+#ndvi.scale <- ((ndvi - ndvi.min) / (ndvi.max - ndvi.min) - 0.5 ) * 2
+#plot(ndvi.scale)
+#summary(values(ndvi.scale))
 
 ### EVI
 evi <- raster('raster/EVI.tif')
 names(evi) <- c('EVI')
-#extent(evi) <- extent(srtm)
+evicl <- clamp(evi, -1, 1)
+evi2 <- setMinMax(evicl)
+evi_rs <- rescaleImage(evi2, ymin = -1, ymax = 1)
+
+summary(evi_rs)
+plot(evi_rs)
 
 ### set Extent
 bbox <- bbox(slope)
@@ -148,7 +161,9 @@ env <- stack(ndvi, evi, ndwi, bright, wetness, slope, srtm)
 #beep(sound = 1)
 
 ### Change Resolution to 100m
-env100 <- aggregate(env, fact = (res(grasscover)*100000/res(env)*100000))
+res_gr <- res(grasscover)
+res_env <- res(env)
+env100 <- aggregate(env, fact = res_gr/res_env)
 #grasscover <- aggregate(grasscover, fact = 1)
 
 # add grasscover data
@@ -197,15 +212,15 @@ varname <- names(env)
 ####################
 # test for collinearity between the environmental variables and decide which to take for the model 
 # Visual inspection of collinearity
-cm <- cor(getValues(env_pred500), use = "complete.obs") # pearson coefficient (default)
+cm <- cor(getValues(env100), use = "complete.obs") # pearson coefficient (default)
 plotcorr(cm, col=ifelse(abs(cm) > 0.7, "red", "grey"))
 
 ### second Approach
-jnk <- layerStats(env_pred500, 'pearson', na.rm = T)
+jnk <- layerStats(env100, 'pearson', na.rm = T)
 corrMatrix <- jnk$'pearson correlation coefficient'
 
-rownames(cm) <- c('Elevation','Slope','NDVI', 'EVI','Brightness','NDWI')
-colnames(cm) <- c('Elevation','Slope','NDVI','EVI','Brightness','NDWI')
+rownames(cm) <- c('NDVI','EVI','NDWI', 'Brightness','Wetness','Slope','SRTM')
+colnames(cm) <- c('NDVI','EVI','NDWI', 'Brightness','Wetness','Slope','SRTM')
 
 ### Plot Collinearity
 corrplot(cm, method = 'color',type = 'upper', order='alphabet',
@@ -217,7 +232,7 @@ corrplot(cm, method = 'color',type = 'upper', order='alphabet',
 ### General Additive Model ###
 ##############################
 
-gammodel <- gam(species ~ s(SRTM)+(Slope) + s(EVI)+s(Brightness)+s(NDWI),
+gammodel <- gam(species ~ s(NDVI)+s(NDWI)+s(Brightness)+s(Wetness)+s(Slope)+s(SRTM),
                 family = "binomial", data = traindata)
 
 summary(gammodel)
@@ -230,28 +245,29 @@ gamtest <- predict(gammodel, newdata = testdata, type ="response")
 val.prob(gamtest, testdata[["species"]])
 
 # Calculate Variable Importance
-gamimp <- varImpBiomod(model = gammodel, varnames = c("Elevation","Slope","EVI","Brightness","NDWI"),
+gamimp <- varImpBiomod(model = gammodel, varnames = c('NDVI','NDWI', 'Brightness','Wetness','Slope','SRTM'),
                        data = traindata, n = 10)
 
 # Plot the Variable Importance
 gamimp3 <- 100*gamimp
 
 gamimp2 <- as.data.frame(gamimp3)
-rownames(gamimp2) <- c('Elevation','Slope','EVI','Brightness','NDWI')
+rownames(gamimp2) <- c('NDVI','NDWI', 'Brightness','Wetness','Slope','SRTM')
 gamimp2 <- tibble::rownames_to_column(gamimp2, "Name")
 colnames(gamimp2) <- c("Variable","Percent")
 
 varimp_gam <- ggplot(gamimp2, aes(x=Variable,y=Percent, fill = Variable))+geom_col()+
-  labs(title="Variable Importance", subtitle = "Northern Bald Ibis (Switzerland and southern Baden-W?rttemberg (GER))")+
-  scale_fill_manual(values = c("#fe9929","#4d9221","palegreen4","palegreen3","royalblue1", "lightblue"))+
+  labs(title="Variable Importance", subtitle = "Northern Bald Ibis (Switzerland)")+
+  scale_fill_manual(values = c("#fe9929","#4d9221","palegreen4","palegreen3","royalblue1", "lightblue",'brown'))+
   geom_text(aes(label=round(Percent, digits = 1), vjust=2.5))+
   ylim(0,100)
+varimp_gam
 
 # Response Function
 plot(gammodel, pages =1)
 
 ### Finally: Prediction Map
-gammap <- raster::predict(env_pred500, gammodel, type = "response", "Pred_Swiss.tif", overwrite=T)
+gammap <- raster::predict(env100, gammodel, type = "response", "Pred_Swiss.tif", overwrite=T)
 plot(gammap)
 
 # save the Prediction Map on your harddrive
@@ -268,11 +284,11 @@ rftraindata <- as(traindata, "data.frame")
 rftraindata$species <- factor(rftraindata$species)
 names(rftraindata)
 
-rfmodel <- randomForest(species ~ SRTM + Slope + EVI + Brightness + NDWI,
+rfmodel <- randomForest(species ~ SRTM + Slope + EVI + Brightness + NDWI + Wetness + NDVI,
                         data = rftraindata, na.action=na.exclude)
 
 ### Prediction Map
-rfmap <- raster::predict(env_pred500, rfmodel, type = "prob", index = 2)
+rfmap <- raster::predict(env100, rfmodel, type = "prob", index = 2)
 plot(rfmap)
 
 #writeRaster(rfmap, filename = ".../Swiss_Pred_RF.tif", overwrite = T)
@@ -299,8 +315,8 @@ varimp_rf <- ggplot(Rfimp2, aes(x=Variable,y=Percent, fill = Variable))+
 # Plot both Results
 
 par(mfrow=c(1,2))
-plot(gammap)
-plot(rfmap)
+plot(gammap, main = 'GAM')
+plot(rfmap, main = 'RF')
 
 plot(varimp_gam)
 plot(varimp_rf)
