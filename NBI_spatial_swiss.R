@@ -35,7 +35,7 @@ library(corrplot)
 ### 1. load NBI Movement Data
 
 # 'clipped NBI speed' Shapefile
-nbi <- readOGR('Model_Swiss/GPS Daten Vögel/2020_feb-nov_16birds_exklLI.shp')
+nbi <- readOGR('Model_Swiss/GPS Daten Vögel/speed5.shp')
 
 # NOTE: clip data to speed !!!!
 
@@ -119,14 +119,6 @@ names(ndwi_rs) <- c('NDWI')
 summary(ndwi_rs)
 plot(ndwi_rs)
 
-# 2. Try/Option
-#ndwi.scale <- ((ndwi - ndwi.min) / (ndwi.max - ndwi.min) - 0.5 ) * 2
-#plot(ndwi.scale)
-
-#names(ndwi) <- c('NDWI')
-#summary(values(ndwi))
-#plot(ndwi)
-
 ### NDVI
 # 1. Methode
 ndvi <- raster('raster/NDVI.tif')
@@ -134,6 +126,7 @@ ndviclamp <- clamp(ndvi, -1, 1)
 ndvi2 <- setMinMax(ndviclamp)
 ndvi_rs <- RStoolbox::rescaleImage( x = ndvi2, ymin = -1, ymax = 1)
 names(ndvi_rs) <- c('NDVI')
+
 summary(ndvi_rs)
 plot(ndvi_rs)
 
@@ -150,6 +143,7 @@ plot(ndvi_rs)
 ### EVI
 evi <- raster('raster/EVI.tif')
 names(evi) <- c('EVI')
+
 plot(evi)
 summary(evi)
 
@@ -171,9 +165,10 @@ grasscover <- setExtent(grasscover, bbox)
 
 # without srtm and grasscover
 env <- stack(ndvi_rs, evi_rs, ndwi_rs, bright, wetness, slope, srtm)
+plot(env)
 
 ### CLIP to AOI of BFF
-env_mask <- raster::mask(raster::crop(env, aoi), aoi)
+#env_mask <- raster::mask(raster::crop(env, aoi), aoi)
 
 # Stack BFF and env Data
 # set extent of BFF to extent of env Data
@@ -188,16 +183,21 @@ env_bff <- stack(env_mask, BFF)
 #beep(sound = 1)
 
 ### Change Resolution to 100m
-env100 <- raster::resample(env_bff, grasscover, method = 'bilinear')
+#env100 <- raster::resample(env_bff, grasscover, method = 'bilinear')
+
+### Change Resolution to 30m
+grasscover <- raster::resample(grasscover, env, method = 'bilinear')
 
 # Check if Resolution of env100 und grasscover is the same
-compareRaster(env100, grasscover)
+#compareRaster(env100, grasscover)
 
 # Add grasscover data to env100 Raster Stack
-env100 <- stack(env100, grasscover)
+#env100 <- stack(env100, grasscover)
+env30 <- stack(env, grasscover)
+plot(env30)
 
 # Clip Point Data to Area of Switzerland
-nbi <- gIntersection(aoi, nbi, byid = TRUE, drop_lower_td = TRUE)
+nbi <- gIntersection(pred, nbi, byid = TRUE, drop_lower_td = TRUE)
 beep(sound = 1)
 
 #############################
@@ -208,20 +208,20 @@ beep(sound = 1)
 
 # selecting 10000 random background samples
 set.seed(2)
-background <- randomPoints(env100, 2000, nbi)
+background <- randomPoints(env30, 2000, nbi)
 
 # select only one presence record in each cell of environmental layer
-presence <- gridSample(xy = nbi,r = env100, n=1)
+presence <- gridSample(xy = nbi,r = env30, n=1)
 
 # now we combine the presence and background points, adding a column "species" that contains
 # the information about presence (1) and background (2)
 fulldata <- SpatialPointsDataFrame(rbind(presence, background),
                                    data = data.frame("species" = rep(c(1,0),c(nrow(presence),nrow(background)))),
                                    match.ID = F,
-                                   proj4string = CRS(projection(env100)))
+                                   proj4string = CRS(projection(env30)))
 
 # add information about environmental conditions at point locations
-fulldata@data <- cbind(fulldata@data, extract(env100, fulldata))
+fulldata@data <- cbind(fulldata@data, extract(env30, fulldata))
 
 # split data set into training and test/validation data
 # not needed if I use training area and validation area
@@ -230,25 +230,29 @@ fold <- kfold(fulldata, k=5)
 traindata <- fulldata[fold != 1,]
 testdata <- fulldata[fold == 1, ]
 
-varname <- names(env100)
+varname <- names(env30)
 
 ####################
 ### Collinearity ###
 ####################
 # test for collinearity between the environmental variables and decide which to take for the model 
 # Visual inspection of collinearity
-cm <- cor(getValues(env100), use = "complete.obs") # pearson coefficient (default)
+cm <- cor(getValues(env30), use = "complete.obs") # pearson coefficient (default)
 plotcorr(cm, col=ifelse(abs(cm) > 0.7, "red", "grey"))
 
 ### second Approach
-jnk <- layerStats(env100, 'pearson', na.rm = T)
+jnk <- layerStats(env30, 'pearson', na.rm = T)
 corrMatrix <- jnk$'pearson correlation coefficient'
 
-rownames(cm) <- c('NDVI','EVI','NDWI', 'Brightness','Wetness','Slope','SRTM', 'Grass','BFF')
-colnames(cm) <- c('NDVI','EVI','NDWI', 'Brightness','Wetness','Slope','SRTM', 'Grass','BFF')
+rownames(corrMatrix) <- c('NDVI','EVI','NDWI','Brightness','Wetness','Slope','SRTM',
+                  'Grass')
+colnames(corrMatrix) <- c('NDVI','EVI','NDWI','Brightness','Wetness','Slope','SRTM',
+                  'Grass')
 
 ### Plot Collinearity
-corrplot(cm, method = 'color',type = 'upper', order='alphabet',
+plotcorr(corrMatrix, col=ifelse(abs(corrMatrix) > 0.7, "red", "grey"))
+
+corrplot(corrMatrix, method = 'color',type = 'upper', order='alphabet',
          addCoef.col='black', tl.col='black', tl.srt=45, diag=F, outline = T)
 
 # --> skip NDVI 
@@ -257,7 +261,7 @@ corrplot(cm, method = 'color',type = 'upper', order='alphabet',
 ### General Additive Model ###
 ##############################
 
-gammodel <- gam(species ~ s(EVI)+s(NDWI)+s(Brightness)+s(Wetness)+s(Slope)+s(SRTM)+s(BFFdens30),
+gammodel <- gam(species ~ s(EVI)+s(NDWI)+s(Brightness)+s(Wetness)+s(Slope)+s(SRTM),
                 family = "binomial", data = traindata)
 
 summary(gammodel)
@@ -311,14 +315,16 @@ rftraindata$species <- factor(rftraindata$species)
 names(rftraindata)
 
 rfmodel <- randomForest(species ~ SRTM + Slope + EVI + Brightness + NDWI +
-                          Grass + Wetness + BFFdens30,
+                          Grass + Wetness,
                         data = rftraindata, na.action=na.exclude)
 
 ### Prediction Map
-rfmap <- raster::predict(env100, rfmodel, type = "prob", index = 2)
+rfmap <- raster::predict(env30, rfmodel, type = "prob", index = 2)
+par(mfrow = c(1,1))
 plot(rfmap)
 
-#writeRaster(rfmap, filename = ".../Swiss_Pred_RF.tif", overwrite = T)
+writeRaster(rfmap, filename = "raster/rfmap30.tif", overwrite = T)
+beep(sound = 3)
 
 # Variable Importance for RfModel
 Rfimp <- varImpBiomod(model = rfmodel, varnames = varname, data = rftraindata, n = 10)
@@ -333,7 +339,7 @@ colnames(Rfimp2) <- c("Variable","Percent")
 
 varimp_rf <- ggplot(Rfimp2, aes(x=Variable,y=Percent, fill = Variable))+
   geom_col(position = 'stack', show.legend = F)+
-  labs(title="Variable Importance", subtitle = "Switzerland - Random Forest",
+  labs(title="Variable Importance", subtitle = "Switzerland - Random Forest Model",
        x='', y='Percent (%)')+
   scale_fill_manual(values = c("#ffeda0","#993404","palegreen4","palegreen3",
                                "royalblue1", "#ec7014",'brown','lightblue','lightgreen'))+
@@ -421,6 +427,18 @@ plot(rfmap)
 
 plot(varimp_gam)
 plot(varimp_rf)
+
+# Export Final Map Raster
+
+# Random Forest
+writeRaster(rfmap, 'raster/rfmapBFF.tif')
+# project Raster
+utm <- c('+proj=utm +zone=32 +ellps=WGS84 +units=m +no_defs')
+rfmap_utm <- projectRaster(rfmap, crs = utm)
+writeRaster(rfmap_utm, 'raster/rfmapBFFutm.tif', overwrite = T)
+
+# General Additive Model
+writeRaster(gammap, 'raster/gammap.tif')
 
 # I decided to use Random Forest Model, because this model seems to work better, especially when
 # having a look at lake areas.
